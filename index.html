@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finanzen</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Farben und Schriften aus den Monatsblättern der Tabelle */
+  :root {
+    color-scheme: light dark;
+    --grund: #ffffff; --text: #000000; --leise: #666666; --zelle: #f3f3f3;
+    --wahl: #000000; --wahl-text: #ffffff; --aus: #666666;
+    --rot: #ff9696; --gruen: #96ff96; --rot-blass: #ffc8c8; --gruen-blass: #c8ffc8;
+    --gelb: #ffff96; --gelb-blass: #ffffc8; --lila: #c896ff; --fokus: #9696ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --grund: #000000; --text: #ffffff; --leise: #999999; --zelle: #434343;
+      --wahl: #ffffff; --wahl-text: #000000;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--grund); color: var(--text);
+    font: 400 16px/1.4 Montserrat, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 26rem; margin: 0 auto; padding: 1rem 1rem 3rem; }
+  form { display: grid; gap: 1.1rem; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend, .feldname { display: block; padding: 0; margin-bottom: .35rem; font-size: .8rem; font-weight: 700; color: var(--leise); }
+  input[type=text], input[type=date], input[type=url], input[type=password] {
+    width: 100%; min-height: 3rem; padding: .6rem .8rem; font: inherit; color: inherit;
+    background: var(--zelle); border: 0; border-radius: 2px;
+  }
+  input:focus-visible, button:focus-visible, summary:focus-visible, .option input:focus-visible + span {
+    outline: 3px solid var(--fokus); outline-offset: 1px;
+  }
+  .optional { font-weight: 400; }
+  [hidden] { display: none !important; }
+
+  .betrag { position: relative; display: block; }
+  .betrag input { font-size: 2rem; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; min-height: 4rem; padding-right: 2.6rem; }
+  .betrag .euro { position: absolute; right: .9rem; bottom: 1rem; font-size: 1.4rem; color: var(--leise); }
+
+  .optionen { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .optionen.art { display: grid; grid-template-columns: 1fr 1fr; }
+  .option { position: relative; }
+  .option input { position: absolute; opacity: 0; inset: 0; margin: 0; }
+  .option span {
+    display: flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0 .9rem;
+    background: var(--zelle); border-radius: 2px; font-size: .95rem;
+  }
+  .option input:checked + span { background: var(--wahl); color: var(--wahl-text); font-weight: 600; }
+  .art .option span { min-height: 3.2rem; font-size: 1rem; }
+  .art .option input:checked + span { color: #000000; font-weight: 700; }
+  .art .option input[value=Ausgabe]:checked + span { background: var(--rot); }
+  .art .option input[value=Einnahme]:checked + span { background: var(--gruen); }
+  .sonstiges { margin-top: .4rem; }
+
+  summary {
+    display: flex; align-items: center; gap: .6rem; min-height: 2.75rem; cursor: pointer; list-style: none;
+    font-size: .8rem; font-weight: 700; color: var(--leise); border-top: 2px solid var(--zelle);
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; margin-left: auto; font-size: 1.3rem; font-weight: 400; line-height: 1; }
+  details[open] summary::after { content: "−"; }
+  summary .optional { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  details .inhalt { display: grid; gap: 1.1rem; padding-top: .4rem; }
+
+  .haupt {
+    font: inherit; font-weight: 700; font-size: 1.05rem; min-height: 3.4rem; border: 0; border-radius: 2px;
+    background: var(--wahl); color: var(--wahl-text); width: 100%;
+  }
+  .haupt:disabled { background: var(--aus); color: #ffffff; }
+  .meldung { margin: 0; padding: .6rem .8rem; border-radius: 2px; font-size: .95rem; color: #000000; }
+  .meldung:empty { display: none; }
+  /* Wie in der Tabelle: blass = noch offen, kräftig = gebucht, lila = Fehler, gelb = Umbuchung */
+  .meldung.offen { background: var(--zelle); color: var(--text); }
+  .meldung.erfolg { background: var(--gruen); }
+  .meldung.fehler { background: var(--lila); color: #ffffff; font-weight: 600; }
+
+  #verlauf { list-style: none; margin: 1.5rem 0 0; padding: 0; font-size: .9rem; display: grid; gap: 2px; }
+  #verlauf li { padding: .5rem .8rem; border-radius: 2px; color: #000000; }
+  #verlauf .kopf { display: flex; justify-content: space-between; gap: 1rem; }
+  #verlauf .zahl { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+  #verlauf li.ausgabe { background: var(--rot); }
+  #verlauf li.einnahme { background: var(--gruen); }
+  #verlauf li.umbuchung { background: var(--gelb); }
+  #verlauf li.ausgabe.wartet { background: var(--rot-blass); }
+  #verlauf li.einnahme.wartet { background: var(--gruen-blass); }
+  #verlauf li.umbuchung.wartet { background: var(--gelb-blass); }
+  #verlauf li.fehler { background: var(--lila); color: #ffffff; }
+  #verlauf .zusatz { margin-top: .2rem; font-size: .8rem; }
+  #verlauf .aktionen { display: flex; gap: .4rem; margin-top: .4rem; }
+  #verlauf .aktionen button {
+    font: inherit; font-size: .85rem; font-weight: 600; min-height: 2.4rem; padding: 0 .8rem;
+    border: 0; border-radius: 2px; background: #ffffff; color: #000000;
+  }
+  .fuss { margin-top: 2rem; text-align: center; }
+  .fuss button { font: inherit; font-size: .85rem; color: var(--leise); background: none; border: 0; min-height: 2.75rem; padding: 0 1rem; text-decoration: underline; }
+  h1 { font-size: 1.2rem; margin: .5rem 0 0; }
+  .hinweis { margin: 0; font-size: .9rem; color: var(--leise); }
+</style>
+</head>
+<body>
+<main>
+  <!-- Eingabe -->
+  <section id="ansicht-eingabe" hidden>
+    <form id="formular" novalidate>
+      <div class="optionen art" role="radiogroup" aria-label="Art">
+        <label class="option"><input type="radio" name="art" value="Ausgabe" checked><span>Ausgabe</span></label>
+        <label class="option"><input type="radio" name="art" value="Einnahme"><span>Einnahme</span></label>
+      </div>
+
+      <label class="betrag">
+        <span class="feldname">Betrag</span>
+        <input type="text" id="betrag" inputmode="decimal" autocomplete="off" placeholder="0,00">
+        <span class="euro" aria-hidden="true">€</span>
+      </label>
+
+      <label>
+        <span class="feldname">Bezeichnung</span>
+        <input type="text" id="bezeichnung" autocomplete="off" autocapitalize="sentences">
+      </label>
+
+      <fieldset><legend>Konto</legend><div id="konto"></div></fieldset>
+
+      <details id="mehr">
+        <summary><span>Optional</span><span class="optional" id="kurz"></span></summary>
+        <div class="inhalt">
+          <fieldset><legend>Typ</legend><div id="typ"></div></fieldset>
+          <fieldset><legend>Kategorie</legend><div id="kategorie"></div></fieldset>
+          <label>
+            <span class="feldname">Datum</span>
+            <input type="date" id="datum">
+          </label>
+        </div>
+      </details>
+
+      <button type="submit" class="haupt" id="senden">Eintragen</button>
+      <p class="meldung" id="status" role="status"></p>
+    </form>
+    <ul id="verlauf" aria-label="Einträge dieser Sitzung und wartende Einträge"></ul>
+    <p class="fuss"><button type="button" id="zu-einstellungen">Einstellungen</button></p>
+  </section>
+
+  <!-- Einstellungen -->
+  <section id="ansicht-einstellungen" hidden>
+    <form id="einstellungen" novalidate>
+      <h1>Einstellungen</h1>
+      <p class="hinweis">Beides bleibt nur auf diesem Gerät gespeichert.</p>
+      <label>
+        <span class="feldname">Web-App-URL (endet auf /exec)</span>
+        <input type="url" id="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+      </label>
+      <label>
+        <span class="feldname">Secret</span>
+        <input type="password" id="secret" autocomplete="off" autocapitalize="none" spellcheck="false">
+      </label>
+      <button type="submit" class="haupt" id="speichern">Speichern und testen</button>
+      <p class="meldung" id="einstellungen-status" role="status"></p>
+      <p class="fuss"><button type="button" id="abbrechen" hidden>Zurück</button></p>
+    </form>
+  </section>
+</main>
+
+<script>
+  'use strict';
+  const SONSTIGES = '__sonstiges__';
+  const ZEITLIMIT_MS = 30000;
+  const SPEICHER = { einstellungen: 'finanzen.einstellungen', auswahl: 'finanzen.auswahl', schlange: 'finanzen.warteschlange' };
+
+  const el = function (id) { return document.getElementById(id); };
+  const formular = el('formular');
+
+  /* ---------- Speicher ---------- */
+  function lies(schluessel, ersatz) {
+    try { const roh = localStorage.getItem(schluessel); return roh ? JSON.parse(roh) : ersatz; }
+    catch (fehler) { return ersatz; }
+  }
+  function schreibe(schluessel, wert) {
+    try { localStorage.setItem(schluessel, JSON.stringify(wert)); return true; }
+    catch (fehler) { return false; }
+  }
+
+  let einstellungen = lies(SPEICHER.einstellungen, null);
+  let auswahl = lies(SPEICHER.auswahl, null);
+  let schlange = lies(SPEICHER.schlange, []);   // wartende und fehlgeschlagene Einträge
+  const erledigt = [];                           // in dieser Sitzung gebuchte Einträge
+
+  /* ---------- Hilfen ---------- */
+  function heute() {
+    const d = new Date();
+    const zwei = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + zwei(d.getMonth() + 1) + '-' + zwei(d.getDate());
+  }
+  function neueId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  }
+  function melde(text, art, ziel) {
+    const feld = ziel || el('status');
+    feld.textContent = text;
+    feld.className = 'meldung ' + (art || '');
+  }
+  function zeige(ansicht) {
+    el('ansicht-eingabe').hidden = ansicht !== 'eingabe';
+    el('ansicht-einstellungen').hidden = ansicht !== 'einstellungen';
+  }
+
+  /* ---------- Verbindung zum Skript ---------- */
+  // text/plain vermeidet die Vorab-Anfrage des Browsers, die Apps Script nicht beantwortet.
+  async function rufe(daten, zugang) {
+    const z = zugang || einstellungen;
+    const abbruch = new AbortController();
+    const uhr = setTimeout(function () { abbruch.abort(); }, ZEITLIMIT_MS);
+    let antwort;
+    try {
+      antwort = await fetch(z.url, {
+        method: 'POST', redirect: 'follow', signal: abbruch.signal,
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(Object.assign({ secret: z.secret }, daten))
+      });
+    } catch (fehler) {
+      throw { netz: true };
+    } finally {
+      clearTimeout(uhr);
+    }
+    let inhalt;
+    try { inhalt = JSON.parse(await antwort.text()); }
+    catch (fehler) { throw { netz: false, text: 'Antwort nicht lesbar. Stimmt die Web-App-URL?' }; }
+    if (!inhalt || !inhalt.ok) throw { netz: false, text: (inhalt && inhalt.fehler) || 'Unbekannter Fehler.' };
+    return inhalt;
+  }
+
+  /* ---------- Auswahlgruppen ---------- */
+  const gruppen = {};
+  function baueGruppe(name, cfg, pflicht) {
+    const huelle = el(name);
+    huelle.textContent = '';
+    const liste = document.createElement('div');
+    liste.className = 'optionen';
+    const frei = document.createElement('input');
+    frei.type = 'text'; frei.className = 'sonstiges'; frei.hidden = true;
+    frei.autocomplete = 'off'; frei.placeholder = 'Sonstiges';
+    frei.setAttribute('aria-label', name + ' (Sonstiges)');
+    let zuletzt = null;
+
+    const werte = cfg.optionen.slice();
+    if (cfg.sonstiges) werte.push(SONSTIGES);
+    werte.forEach(function (wert) {
+      const label = document.createElement('label');
+      label.className = 'option';
+      const input = document.createElement('input');
+      input.type = 'radio'; input.name = name; input.value = wert;
+      input.defaultChecked = wert === cfg.standard;
+      if (input.defaultChecked) zuletzt = input;
+      const span = document.createElement('span');
+      span.textContent = wert === SONSTIGES ? 'Sonstiges' : wert;
+      input.addEventListener('click', function () {
+        if (!pflicht && zuletzt === input) { input.checked = false; zuletzt = null; }
+        else { zuletzt = input; }
+        zeigeFrei(true);
+      });
+      label.append(input, span);
+      liste.append(label);
+    });
+    huelle.append(liste, frei);
+
+    function gewaehlt() { return liste.querySelector('input:checked'); }
+    function zeigeFrei(fokus) {
+      const g = gewaehlt();
+      frei.hidden = !(g && g.value === SONSTIGES);
+      if (!frei.hidden && fokus) frei.focus();
+    }
+    gruppen[name] = {
+      wert: function () {
+        const g = gewaehlt();
+        if (!g) return '';
+        return g.value === SONSTIGES ? frei.value.trim() : g.value;
+      },
+      nachReset: function () { zuletzt = gewaehlt(); frei.value = ''; zeigeFrei(false); }
+    };
+  }
+  function baueGruppen() {
+    baueGruppe('konto', auswahl.konto, true);
+    baueGruppe('typ', auswahl.typ, false);
+    baueGruppe('kategorie', auswahl.kategorie, false);
+    zeigeKurz();
+  }
+
+  function art() { return formular.querySelector('input[name=art]:checked').value; }
+
+  // Kurzfassung der optionalen Angaben in der eingeklappten Zeile
+  function zeigeKurz() {
+    if (!gruppen.typ) return;
+    const teile = [gruppen.typ.wert(), gruppen.kategorie.wert()].filter(Boolean);
+    const datum = el('datum').value;
+    if (!datum || datum === heute()) teile.push('heute');
+    else teile.push(datum.slice(8, 10) + '.' + datum.slice(5, 7) + '.');
+    el('kurz').textContent = teile.join(' · ');
+  }
+  ['click', 'input', 'change'].forEach(function (ereignis) { el('mehr').addEventListener(ereignis, zeigeKurz); });
+
+  /* ---------- Eintragen ---------- */
+  formular.addEventListener('submit', function (ereignis) {
+    ereignis.preventDefault();
+    const betrag = el('betrag').value.trim();
+    const bezeichnung = el('bezeichnung').value.trim();
+    if (!/^\d+([.,]\d{1,2})?$/.test(betrag)) { melde('Betrag fehlt oder ist keine Zahl.', 'fehler'); el('betrag').focus(); return; }
+    if (!bezeichnung) { melde('Bezeichnung fehlt.', 'fehler'); el('bezeichnung').focus(); return; }
+
+    const daten = {
+      id: neueId(),
+      datum: el('datum').value || heute(),
+      betrag: betrag,
+      art: art(),
+      bezeichnung: bezeichnung,
+      konto: gruppen.konto.wert(),
+      typ: gruppen.typ.wert(),
+      kategorie: gruppen.kategorie.wert()
+    };
+
+    // Erst sichern, dann senden: So geht ohne Netz nichts verloren.
+    schlange.push({ daten: daten, fehler: '' });
+    if (!schreibe(SPEICHER.schlange, schlange)) {
+      schlange.pop();
+      melde('Der Eintrag konnte auf dem Gerät nicht zwischengespeichert werden.', 'fehler');
+      return;
+    }
+    zuruecksetzen();
+    zeigeVerlauf();
+    melde('Wird eingetragen …', 'offen');
+    sende();
+  });
+
+  function zuruecksetzen() {
+    formular.reset();
+    Object.keys(gruppen).forEach(function (name) { gruppen[name].nachReset(); });
+    el('datum').value = heute();
+    zeigeKurz();
+    el('betrag').focus();
+  }
+
+  /* ---------- Warteschlange ---------- */
+  let sendet = false;
+  async function sende() {
+    if (sendet || !einstellungen) return;
+    sendet = true;
+    try {
+      // Der Reihe nach; Einträge mit Serverfehler bleiben liegen, bis man sie erneut sendet oder löscht.
+      for (;;) {
+        const posten = schlange.filter(function (p) { return !p.fehler; })[0];
+        if (!posten) break;
+        try {
+          const antwort = await rufe(posten.daten);
+          schlange = schlange.filter(function (p) { return p !== posten; });
+          erledigt.unshift(posten.daten);
+          melde((antwort.duplikat ? 'War schon eingetragen: ' : 'Eingetragen: ') + antwort.blatt + ', Zeile ' + antwort.zeile + '.', 'erfolg');
+        } catch (fehler) {
+          if (fehler && fehler.netz) {
+            const n = schlange.filter(function (p) { return !p.fehler; }).length;
+            melde('Kein Netz. ' + (n === 1 ? '1 Eintrag wartet' : n + ' Einträge warten') + ' und wird später gesendet.', 'offen');
+            break;
+          }
+          posten.fehler = (fehler && fehler.text) || 'Unbekannter Fehler.';
+          melde(posten.fehler, 'fehler');
+        }
+        schreibe(SPEICHER.schlange, schlange);
+        zeigeVerlauf();
+      }
+    } finally {
+      sendet = false;
+      schreibe(SPEICHER.schlange, schlange);
+      zeigeVerlauf();
+    }
+  }
+  window.addEventListener('online', sende);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) sende(); });
+
+  function zeigeVerlauf() {
+    const liste = el('verlauf');
+    liste.textContent = '';
+    const zeile = function (daten, zustand, posten) {
+      const li = document.createElement('li');
+      li.className = (daten.kategorie === 'Umbuchung' ? 'umbuchung' : daten.art === 'Einnahme' ? 'einnahme' : 'ausgabe') + (zustand ? ' ' + zustand : '');
+      const kopf = document.createElement('div');
+      kopf.className = 'kopf';
+      const name = document.createElement('span');
+      name.textContent = daten.bezeichnung + ' · ' + daten.konto;
+      const zahl = document.createElement('span');
+      zahl.className = 'zahl';
+      zahl.textContent = (daten.art === 'Ausgabe' ? '−' : '+') + daten.betrag.replace('.', ',') + ' €';
+      kopf.append(name, zahl);
+      li.append(kopf);
+      if (zustand === 'wartet') {
+        const zusatz = document.createElement('div');
+        zusatz.className = 'zusatz';
+        zusatz.textContent = 'wartet auf Netz';
+        li.append(zusatz);
+      }
+      if (zustand === 'fehler') {
+        li.className = 'fehler';
+        const zusatz = document.createElement('div');
+        zusatz.className = 'zusatz';
+        zusatz.textContent = posten.fehler;
+        const aktionen = document.createElement('div');
+        aktionen.className = 'aktionen';
+        const nochmal = document.createElement('button');
+        nochmal.type = 'button'; nochmal.textContent = 'Nochmal senden';
+        nochmal.addEventListener('click', function () { posten.fehler = ''; zeigeVerlauf(); sende(); });
+        const weg = document.createElement('button');
+        weg.type = 'button'; weg.textContent = 'Löschen';
+        weg.addEventListener('click', function () {
+          schlange = schlange.filter(function (p) { return p !== posten; });
+          schreibe(SPEICHER.schlange, schlange);
+          zeigeVerlauf();
+        });
+        aktionen.append(nochmal, weg);
+        li.append(zusatz, aktionen);
+      }
+      liste.append(li);
+    };
+    schlange.slice().reverse().forEach(function (posten) { zeile(posten.daten, posten.fehler ? 'fehler' : 'wartet', posten); });
+    erledigt.forEach(function (daten) { zeile(daten, '', null); });
+  }
+
+  /* ---------- Einstellungen ---------- */
+  el('zu-einstellungen').addEventListener('click', function () {
+    el('url').value = einstellungen ? einstellungen.url : '';
+    el('secret').value = einstellungen ? einstellungen.secret : '';
+    el('abbrechen').hidden = !einstellungen;
+    melde('', '', el('einstellungen-status'));
+    zeige('einstellungen');
+  });
+  el('abbrechen').addEventListener('click', function () { zeige('eingabe'); });
+
+  el('einstellungen').addEventListener('submit', async function (ereignis) {
+    ereignis.preventDefault();
+    const feld = el('einstellungen-status');
+    const zugang = { url: el('url').value.trim(), secret: el('secret').value };
+    if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(zugang.url)) { melde('Die URL muss mit https://script.google.com/ beginnen und auf /exec enden.', 'fehler', feld); return; }
+    if (!zugang.secret) { melde('Secret fehlt.', 'fehler', feld); return; }
+    el('speichern').disabled = true;
+    melde('Verbindung wird geprüft …', 'offen', feld);
+    try {
+      const antwort = await rufe({ aktion: 'konfig' }, zugang);
+      einstellungen = zugang;
+      auswahl = antwort.auswahl;
+      schreibe(SPEICHER.einstellungen, einstellungen);
+      schreibe(SPEICHER.auswahl, auswahl);
+      starteEingabe();
+      melde('Verbunden.', 'erfolg');
+    } catch (fehler) {
+      melde(fehler && fehler.netz ? 'Keine Verbindung. Netz und URL prüfen.' : fehler.text, 'fehler', feld);
+    } finally {
+      el('speichern').disabled = false;
+    }
+  });
+
+  /* ---------- Start ---------- */
+  function starteEingabe() {
+    baueGruppen();
+    el('datum').value = heute();
+    zeigeKurz();
+    zeigeVerlauf();
+    zeige('eingabe');
+    el('betrag').focus();
+  }
+
+  // Auswahllisten im Hintergrund auffrischen; neu aufgebaut wird nur, wenn sich etwas geändert hat
+  // und gerade nichts eingetippt ist.
+  async function frischeAuswahlAuf() {
+    try {
+      const antwort = await rufe({ aktion: 'konfig' });
+      if (JSON.stringify(antwort.auswahl) === JSON.stringify(auswahl)) return;
+      auswahl = antwort.auswahl;
+      schreibe(SPEICHER.auswahl, auswahl);
+      if (!el('betrag').value && !el('bezeichnung').value) baueGruppen();
+    } catch (fehler) {
+      if (fehler && !fehler.netz) melde(fehler.text, 'fehler');
+    }
+  }
+
+  if (einstellungen && auswahl) {
+    starteEingabe();
+    sende();
+    frischeAuswahlAuf();
+  } else {
+    el('abbrechen').hidden = true;
+    zeige('einstellungen');
+  }
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+</script>
+</body>
+</html>
